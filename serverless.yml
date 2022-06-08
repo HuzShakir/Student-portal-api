@@ -1,0 +1,80 @@
+service: student-lambda
+plugins:
+  - serverless-dotenv-plugin
+frameworkVersion: '3'
+useDotenv: true
+	
+custom:
+  tableName: ${env:USERS_TABLE}
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - Fn::GetAtt: [ UsersTable, Arn ]
+  environment:
+    USERS_TABLE: ${self:custom.tableName}
+  httpApi:
+    cors: true
+    authorizers:
+      someJwtAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: https://cognito-idp.${env:REGION}.amazonaws.com/${env:POOL_ID}
+        audience:
+          - ${env:CLIENT_ID}
+
+functions:
+  post:
+    handler: handler.handler
+    events:
+      - httpApi: 
+          path: /{any+}
+          method: 'POST'
+          authorizer: 
+            name: someJwtAuthorizer
+  get:
+    handler: handler.handler
+    events:
+      - httpApi: 
+          path: /{any+}
+          method: 'GET'
+          authorizer: 
+            name: someJwtAuthorizer
+  delete:
+    handler: handler.handler
+    events:
+      - httpApi: 
+          path: /{any+}
+          method: 'DELETE'
+          authorizer: 
+            name: someJwtAuthorizer
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:custom.tableName}
